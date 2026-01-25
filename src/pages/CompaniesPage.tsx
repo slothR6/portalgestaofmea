@@ -1,18 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Company, Project } from "../types";
+import { Company } from "../types";
 import { createCompany, softDeleteCompany, updateCompany } from "../services/companies";
-import { ToastType } from "../hooks/useToasts";
-
-type ToastPayload = { type: ToastType; title: string; message?: string };
-
-interface CompaniesPageProps {
-  companies: Company[];
-  projects: Project[];
-  currentUserUid: string;
-  loading: boolean;
-  onOpenProject: (projectId: string) => void;
-  pushToast: (payload: ToastPayload) => void;
-}
+import { usePortalStore } from "../hooks/usePortalStore";
+import { sanitize } from "../utils/sanitize";
 
 const emptyForm = {
   name: "",
@@ -22,40 +12,30 @@ const emptyForm = {
   notes: "",
 };
 
-function sanitize(value: string) {
-  return (value || "").trim().replace(/\s+/g, " ");
-}
-
-export default function CompaniesPage({
-  companies,
-  projects,
-  currentUserUid,
-  loading,
-  onOpenProject,
-  pushToast,
-}: CompaniesPageProps) {
+export default function CompaniesPage() {
+  const { state, profile, pushToast, actions, setView } = usePortalStore();
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
   const [form, setForm] = useState(emptyForm);
 
   useEffect(() => {
-    if (!selectedCompanyId && companies.length > 0) {
-      setSelectedCompanyId(companies[0].id);
+    if (!selectedCompanyId && state.companies.length > 0) {
+      setSelectedCompanyId(state.companies[0].id);
     }
-    if (selectedCompanyId && !companies.find((c) => c.id === selectedCompanyId)) {
-      setSelectedCompanyId(companies[0]?.id ?? null);
+    if (selectedCompanyId && !state.companies.find((c) => c.id === selectedCompanyId)) {
+      setSelectedCompanyId(state.companies[0]?.id ?? null);
     }
-  }, [companies, selectedCompanyId]);
+  }, [state.companies, selectedCompanyId]);
 
   const selectedCompany = useMemo(
-    () => companies.find((c) => c.id === selectedCompanyId) || null,
-    [companies, selectedCompanyId]
+    () => state.companies.find((c) => c.id === selectedCompanyId) || null,
+    [state.companies, selectedCompanyId]
   );
 
   const selectedCompanyProjects = useMemo(() => {
     if (!selectedCompany) return [];
-    return projects.filter((p) => p.companyId === selectedCompany.id);
-  }, [projects, selectedCompany]);
+    return state.projects.filter((p) => p.companyId === selectedCompany.id);
+  }, [state.projects, selectedCompany]);
 
   const startCreate = () => {
     setForm(emptyForm);
@@ -99,9 +79,8 @@ export default function CompaniesPage({
         const newId = await createCompany({
           ...payload,
           createdAt: Date.now(),
-          createdByUid: currentUserUid,
+          createdByUid: profile?.uid || "",
         });
-        // Mantemos a empresa recém-criada em foco para facilitar o fluxo.
         setSelectedCompanyId(newId);
         pushToast({ type: "success", title: "Empresa criada" });
       } else if (formMode === "edit" && selectedCompany) {
@@ -128,7 +107,6 @@ export default function CompaniesPage({
     if (!confirm(confirmMessage)) return;
 
     try {
-      // Soft delete para manter histórico e evitar impactos em projetos existentes.
       await softDeleteCompany(selectedCompany.id);
       pushToast({ type: "success", title: "Empresa removida" });
       setSelectedCompanyId(null);
@@ -163,13 +141,13 @@ export default function CompaniesPage({
           <p className="text-xs text-slate-400 mt-1">Selecione para ver detalhes.</p>
 
           <div className="mt-6 space-y-3 max-h-[520px] overflow-auto pr-1">
-            {loading ? (
+            {state.loading.companies ? (
               <div className="py-10 text-center text-slate-300 text-sm">Carregando empresas...</div>
             ) : null}
-            {!loading && companies.length === 0 ? (
+            {!state.loading.companies && state.companies.length === 0 ? (
               <div className="py-10 text-center text-slate-300 text-sm">Nenhuma empresa cadastrada.</div>
             ) : null}
-            {companies.map((company) => (
+            {state.companies.map((company) => (
               <button
                 key={company.id}
                 onClick={() => {
@@ -184,7 +162,7 @@ export default function CompaniesPage({
               >
                 <p className="font-black text-slate-800">{company.name}</p>
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mt-2">
-                  {projects.filter((p) => p.companyId === company.id).length} projetos
+                  {state.projects.filter((p) => p.companyId === company.id).length} projetos
                 </p>
               </button>
             ))}
@@ -197,9 +175,7 @@ export default function CompaniesPage({
               <h3 className="text-xl font-black text-slate-800">
                 {formMode === "create" ? "Nova empresa" : "Editar empresa"}
               </h3>
-              <p className="text-sm text-slate-500 mt-2">
-                Preencha os dados essenciais para vincular projetos.
-              </p>
+              <p className="text-sm text-slate-500 mt-2">Preencha os dados essenciais para vincular projetos.</p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
                 <div className="md:col-span-2">
@@ -280,8 +256,7 @@ export default function CompaniesPage({
                     <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">Empresa</p>
                     <h2 className="text-2xl font-black text-slate-900 mt-2">{selectedCompany.name}</h2>
                     <p className="text-sm text-slate-500 mt-2">
-                      {selectedCompany.email || "Email não informado"} •{" "}
-                      {selectedCompany.phone || "Telefone não informado"}
+                      {selectedCompany.email || "Email não informado"} • {selectedCompany.phone || "Telefone não informado"}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -303,21 +278,15 @@ export default function CompaniesPage({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">CNPJ</p>
-                    <p className="text-sm font-bold text-slate-700 mt-2">
-                      {selectedCompany.cnpj || "Não informado"}
-                    </p>
+                    <p className="text-sm font-bold text-slate-700 mt-2">{selectedCompany.cnpj || "Não informado"}</p>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Projetos ativos</p>
-                    <p className="text-sm font-bold text-slate-700 mt-2">
-                      {selectedCompanyProjects.length}
-                    </p>
+                    <p className="text-sm font-bold text-slate-700 mt-2">{selectedCompanyProjects.length}</p>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Contato</p>
-                    <p className="text-sm font-bold text-slate-700 mt-2">
-                      {selectedCompany.email || "Sem e-mail"}
-                    </p>
+                    <p className="text-sm font-bold text-slate-700 mt-2">{selectedCompany.email || "Sem e-mail"}</p>
                   </div>
                 </div>
 
@@ -331,25 +300,22 @@ export default function CompaniesPage({
 
               <div className="bg-white rounded-3xl border border-slate-200 shadow-[0_22px_45px_-35px_rgba(15,23,42,0.45)] p-8">
                 <h3 className="text-xl font-black text-slate-800">Projetos desta empresa</h3>
-                <p className="text-sm text-slate-500 mt-1">
-                  Clique em um projeto para abrir o detalhe completo.
-                </p>
+                <p className="text-sm text-slate-500 mt-1">Clique em um projeto para abrir o detalhe completo.</p>
 
                 <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                   {selectedCompanyProjects.map((project) => (
                     <button
                       key={project.id}
-                      onClick={() => onOpenProject(project.id)}
+                      onClick={() => {
+                        actions.setSelectedProjectId(project.id);
+                        setView("DETALHE_PROJETO");
+                      }}
                       className="text-left rounded-2xl border border-slate-200 bg-slate-50/60 p-5 hover:bg-slate-50 transition"
                     >
-                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-700">
-                        {project.companyName}
-                      </p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-700">{project.companyName}</p>
                       <h4 className="text-lg font-black text-slate-900 mt-2">{project.name}</h4>
                       {project.description ? (
-                        <p className="text-sm text-slate-500 mt-2 line-clamp-2">
-                          {project.description}
-                        </p>
+                        <p className="text-sm text-slate-500 mt-2 line-clamp-2">{project.description}</p>
                       ) : (
                         <p className="text-sm text-slate-400 mt-2">Sem descrição.</p>
                       )}
@@ -358,9 +324,7 @@ export default function CompaniesPage({
                 </div>
 
                 {selectedCompanyProjects.length === 0 ? (
-                  <div className="py-10 text-center text-slate-300 text-sm">
-                    Nenhum projeto vinculado.
-                  </div>
+                  <div className="py-10 text-center text-slate-300 text-sm">Nenhum projeto vinculado.</div>
                 ) : null}
               </div>
             </>
