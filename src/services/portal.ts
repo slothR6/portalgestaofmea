@@ -116,6 +116,24 @@ export async function deleteProviderSafetyDoc(providerUid: string, docId: string
   await deleteDoc(doc(db, "providers", providerUid, "safetyDocs", docId));
 }
 
+export async function getNextProposalSequence(companyId: string) {
+  const snap = await getDocs(query(collection(db, "projects"), where("companyId", "==", companyId)));
+  let maxSequence = 0;
+  snap.docs.forEach((docSnap) => {
+    const data = docSnap.data() as any;
+    let seq = typeof data.proposalSequence === "number" ? data.proposalSequence : 0;
+    if (!seq && typeof data.proposalCode === "string") {
+      const match = data.proposalCode.match(/^PR\\d{2}-(\\d+)\\./);
+      if (match) {
+        const parsed = Number(match[1]);
+        if (!Number.isNaN(parsed)) seq = parsed;
+      }
+    }
+    if (seq > maxSequence) maxSequence = seq;
+  });
+  return maxSequence + 1;
+}
+
 // ---------- QUERY HELPERS ----------
 export function getBaseUsersQuery(isAdmin: boolean) {
   if (isAdmin) {

@@ -7,9 +7,10 @@ import Button from "../../components/common/Button";
 import { Priority, Project } from "../../types";
 import { sanitize } from "../../utils/sanitize";
 import { isValidDateISO } from "../../utils/dates";
-import { createProject, createDelivery, updateProject as updateProjectSvc } from "../../services/portal";
+import { createProject, createDelivery, getNextProposalSequence, updateProject as updateProjectSvc } from "../../services/portal";
 import { createNotification } from "../../services/notifications";
 import { logout as logoutSvc } from "../../services/auth";
+import { getNextCompanyNumber, updateCompany } from "../../services/companies";
 
 interface ShellActions {
   openCreateProject: () => void;
@@ -60,7 +61,14 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   };
 
   const openCreateProject = () => {
-    actions.setProjectForm({ companyId: "", name: "", description: "", memberUids: [] });
+    actions.setProjectForm({
+      companyId: "",
+      name: "",
+      description: "",
+      memberUids: [],
+      projectType: "",
+      projectTypeOther: "",
+    });
     actions.setModals({ projectCreateOpen: true });
   };
 
@@ -96,6 +104,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     const company = state.companies.find((c) => c.id === companyId) || null;
     const name = sanitize(state.projectForm.name);
     const description = sanitize(state.projectForm.description);
+    const projectType = state.projectForm.projectType;
+    const projectTypeOther = sanitize(state.projectForm.projectTypeOther);
 
     if (!companyId || !company) {
       pushToast({ type: "error", title: "Selecione uma empresa válida" });
@@ -105,8 +115,33 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       pushToast({ type: "error", title: "Informe o nome do projeto" });
       return;
     }
+    if (!projectType) {
+      pushToast({ type: "error", title: "Selecione o tipo de projeto" });
+      return;
+    }
+    if (projectType === "OUTRO" && !projectTypeOther) {
+      pushToast({ type: "error", title: "Informe o tipo de projeto" });
+      return;
+    }
 
     try {
+      const createdAt = Date.now();
+      let companyNumber = company.companyNumber;
+      if (!companyNumber) {
+        companyNumber = await getNextCompanyNumber();
+        await updateCompany(company.id, { companyNumber });
+      }
+      if (!companyNumber) {
+        pushToast({ type: "error", title: "Erro ao gerar número da empresa" });
+        return;
+      }
+
+      const proposalSequence = await getNextProposalSequence(company.id);
+      const date = new Date(createdAt);
+      const month = `${date.getMonth() + 1}`.padStart(2, "0");
+      const year = date.getFullYear();
+      const proposalCode = `PR${String(companyNumber).padStart(2, "0")}-${String(proposalSequence).padStart(2, "0")}.${month}.${year}`;
+
       await createProject({
         companyId,
         companyName: company.name,
@@ -115,15 +150,19 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         manager: profile.name,
         managerUid: profile.uid,
         memberUids: state.projectForm.memberUids,
-        status: "EM_ANDAMENTO",
+        status: "PROPOSTA",
+        proposalCode,
+        proposalSequence,
+        projectType,
+        ...(projectType === "OUTRO" ? { projectTypeOther } : {}),
         completionRate: 0,
-        createdAt: Date.now(),
+        createdAt,
       });
       actions.setModals({ projectCreateOpen: false });
-      pushToast({ type: "success", title: "Projeto criado" });
-      setView("PROJETOS");
+      pushToast({ type: "success", title: "Proposta criada" });
+      setView("PROPOSTAS");
     } catch (error: any) {
-      pushToast({ type: "error", title: "Erro ao criar projeto", message: error?.message || "" });
+      pushToast({ type: "error", title: "Erro ao criar proposta", message: error?.message || "" });
     }
   };
 
@@ -167,6 +206,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       pushToast({ type: "error", title: "Selecione um projeto" });
       return;
     }
+    if (project.status === "PROPOSTA" || project.status === "RECUSADA") {
+      pushToast({ type: "error", title: "A proposta precisa ser aprovada antes de criar entregas" });
+      return;
+    }
 
     const title = sanitize(state.deliveryForm.title);
     const deadline = state.deliveryForm.deadline;
@@ -208,14 +251,19 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const deliveryProjects = useMemo(
+    () => state.projects.filter((p) => p.status !== "PROPOSTA" && p.status !== "RECUSADA"),
+    [state.projects]
+  );
+
   const projectMembers = useMemo(() => {
     if (!state.deliveryForm.projectId) return [];
-    const project = state.projects.find((x) => x.id === state.deliveryForm.projectId);
+    const project = deliveryProjects.find((x) => x.id === state.deliveryForm.projectId);
     const memberUids = project?.memberUids || [];
     return state.users
       .filter((u) => u.role === "PRESTADOR" && u.active && u.status === "ACTIVE")
       .filter((u) => memberUids.includes(u.uid));
-  }, [state.deliveryForm.projectId, state.projects, state.users]);
+  }, [state.deliveryForm.projectId, deliveryProjects, state.users]);
 
   return (
     <ShellContext.Provider value={{ openCreateProject, openEditProject, openCreateDelivery, logout }}>
@@ -234,7 +282,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
         <Modal
           open={state.modals.projectCreateOpen}
-          title="Criar Projeto"
+          title="Criar Proposta"
           onClose={() => actions.setModals({ projectCreateOpen: false })}
         >
           <div className="space-y-5">
@@ -254,6 +302,35 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               </select>
               {state.companies.length === 0 ? (
                 <p className="text-[10px] text-gray-400 mt-2">Cadastre uma empresa antes de criar projetos.</p>
+              ) : null}
+            </div>
+
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Tipo de projeto</p>
+              <select
+                value={state.projectForm.projectType}
+                onChange={(e) =>
+                  actions.setProjectForm({
+                    ...state.projectForm,
+                    projectType: e.target.value as typeof state.projectForm.projectType,
+                    projectTypeOther: e.target.value === "OUTRO" ? state.projectForm.projectTypeOther : "",
+                  })
+                }
+                className="w-full px-5 py-4 bg-white border border-gray-100 rounded-2xl text-sm focus:ring-2 focus:ring-[#1895BD] outline-none shadow-inner"
+              >
+                <option value="">Selecione um tipo</option>
+                <option value="INSPECAO">InspeÃ§Ã£o</option>
+                <option value="ANALISE_FALHA">AnÃ¡lise de falha</option>
+                <option value="DESENVOLVIMENTO_ENGENHARIA">Desenvolvimento de engenharia</option>
+                <option value="OUTRO">Outro</option>
+              </select>
+              {state.projectForm.projectType === "OUTRO" ? (
+                <input
+                  value={state.projectForm.projectTypeOther}
+                  onChange={(e) => actions.setProjectForm({ ...state.projectForm, projectTypeOther: e.target.value })}
+                  className="w-full mt-3 px-5 py-4 bg-white border border-gray-100 rounded-2xl text-sm focus:ring-2 focus:ring-[#1895BD] outline-none shadow-inner"
+                  placeholder="Informe o tipo"
+                />
               ) : null}
             </div>
 
@@ -303,7 +380,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               <Button variant="outline" onClick={() => actions.setModals({ projectCreateOpen: false })}>
                 Cancelar
               </Button>
-              <Button onClick={saveProject}>Salvar</Button>
+              <Button onClick={saveProject}>Salvar proposta</Button>
             </div>
           </div>
         </Modal>
@@ -409,7 +486,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                 className="w-full px-5 py-4 bg-white border border-gray-100 rounded-2xl text-sm outline-none shadow-inner"
               >
                 <option value="">Selecione</option>
-                {state.projects.map((project) => (
+                {deliveryProjects.map((project) => (
                   <option key={project.id} value={project.id}>
                     {project.companyName} - {project.name}
                   </option>

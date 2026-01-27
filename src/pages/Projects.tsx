@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import Card from "../components/common/Card";
 import Button from "../components/common/Button";
 import Badge from "../components/common/Badge";
@@ -11,7 +11,11 @@ import { Project } from "../types";
 export default function ProjectsPage() {
   const { role, state, actions, setView, pushToast } = usePortalStore();
   const { openCreateProject, openEditProject } = useShellActions();
-  const projectsPaged = usePagination(state.projects);
+  const activeProjects = useMemo(
+    () => state.projects.filter((p) => p.status !== "PROPOSTA" && p.status !== "RECUSADA"),
+    [state.projects]
+  );
+  const projectsPaged = usePagination(activeProjects);
 
   const deleteProject = async (project: Project) => {
     if (!confirm(`Excluir o projeto "${project.name}"? Isso também removerá as entregas dele.`)) return;
@@ -35,7 +39,7 @@ export default function ProjectsPage() {
         </div>
         {role === "ADMIN" ? (
           <Button variant="primary" onClick={openCreateProject}>
-            + Novo Projeto
+            + Nova Proposta
           </Button>
         ) : null}
       </div>

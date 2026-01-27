@@ -4,6 +4,8 @@ export type UserStatus = "PENDING" | "ACTIVE" | "REJECTED" | "DELETED";
 export type Status = "PENDENTE" | "REVISAO" | "AJUSTES" | "APROVADO" | "ATRASADO";
 export type Progress = "A_FAZER" | "FAZENDO" | "REVISAO" | "APROVADO";
 export type Priority = "BAIXA" | "MEDIA" | "ALTA";
+export type ProjectStatus = "PROPOSTA" | "EM_ANDAMENTO" | "CONCLUIDO" | "PAUSADO" | "RECUSADA";
+export type ProjectType = "INSPECAO" | "ANALISE_FALHA" | "DESENVOLVIMENTO_ENGENHARIA" | "OUTRO";
 
 export type ViewState =
   | "LOGIN"
@@ -12,6 +14,7 @@ export type ViewState =
   | "DASHBOARD"
   | "REUNIOES"
   | "EMPRESAS"
+  | "PROPOSTAS"
   | "PROJETOS"
   | "DETALHE_PROJETO"
   | "ENTREGAS"
@@ -118,7 +121,11 @@ export interface Project {
   manager: string;
   managerUid: string;
   memberUids: string[];
-  status: "EM_ANDAMENTO" | "CONCLUIDO" | "PAUSADO";
+  status: ProjectStatus;
+  proposalCode?: string;
+  proposalSequence?: number;
+  projectType?: ProjectType;
+  projectTypeOther?: string;
   completionRate: number;
   externalLinks?: ExternalLink[];
   createdAt: number;
@@ -128,6 +135,7 @@ export interface Project {
 
 export interface Company {
   id: string;
+  companyNumber?: number;
   name: string;
   cnpj?: string;
   email?: string;

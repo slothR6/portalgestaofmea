@@ -60,6 +60,7 @@ export default function Sidebar({
 
       <nav className="flex-1 px-6 space-y-2">
         <NavItem id="DASHBOARD" label="Dashboard" icon="⚡" badge={unread} />
+        {role === "ADMIN" ? <NavItem id="PROPOSTAS" label="Propostas" icon="🧾" /> : null}
         <NavItem id="PROJETOS" label="Projetos" icon="📂" />
         {role === "ADMIN" ? <NavItem id="EMPRESAS" label="Empresas" icon="🏢" /> : null}
         <NavItem id="ENTREGAS" label={role === "ADMIN" ? "Entregas" : "Minhas Entregas"} icon="📦" />

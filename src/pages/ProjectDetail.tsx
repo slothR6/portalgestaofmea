@@ -72,15 +72,51 @@ export default function ProjectDetailPage() {
 
   if (!selectedProject) return null;
 
+  const isProposal = selectedProject.status === "PROPOSTA";
+  const isRejected = selectedProject.status === "RECUSADA";
+  const projectTypeLabel =
+    selectedProject.projectType === "OUTRO"
+      ? selectedProject.projectTypeOther || "Outro"
+      : selectedProject.projectType === "INSPECAO"
+      ? "Inspeção"
+      : selectedProject.projectType === "ANALISE_FALHA"
+      ? "Análise de falha"
+      : selectedProject.projectType === "DESENVOLVIMENTO_ENGENHARIA"
+      ? "Desenvolvimento de engenharia"
+      : "Não informado";
+
+  const approveProposal = async () => {
+    if (!isProposal || role !== "ADMIN") return;
+    try {
+      await updateProjectSvc(selectedProject.id, { status: "EM_ANDAMENTO" });
+      pushToast({ type: "success", title: "Proposta aprovada" });
+      setView("PROJETOS");
+    } catch (error: any) {
+      pushToast({ type: "error", title: "Erro ao aprovar proposta", message: error?.message || "" });
+    }
+  };
+
+  const rejectProposal = async () => {
+    if (!isProposal || role !== "ADMIN") return;
+    if (!confirm(`Recusar a proposta "${selectedProject.name}"?`)) return;
+    try {
+      await updateProjectSvc(selectedProject.id, { status: "RECUSADA" });
+      pushToast({ type: "success", title: "Proposta recusada" });
+      setView("PROPOSTAS");
+    } catch (error: any) {
+      pushToast({ type: "error", title: "Erro ao recusar proposta", message: error?.message || "" });
+    }
+  };
+
   return (
     <>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between rounded-3xl border border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 text-white px-8 py-6">
         <div className="flex flex-col gap-2">
           <button
-            onClick={() => setView("PROJETOS")}
+            onClick={() => setView(isProposal ? "PROPOSTAS" : "PROJETOS")}
             className="text-xs font-black uppercase tracking-[0.4em] text-slate-200 hover:text-white text-left"
           >
-            ← Projetos
+            ← {isProposal ? "Propostas" : "Projetos"}
           </button>
           <h1 className="text-3xl font-black">{selectedProject.name}</h1>
         </div>
@@ -88,11 +124,23 @@ export default function ProjectDetailPage() {
         {role === "ADMIN" ? (
           <div className="flex gap-3 flex-wrap">
             <Button variant="outline" onClick={() => openEditProject(selectedProject)}>
-              Editar projeto
+              {isProposal ? "Editar proposta" : "Editar projeto"}
             </Button>
-            <Button variant="primary" onClick={() => openCreateDelivery(selectedProject.id)}>
-              + Solicitar entrega
-            </Button>
+            {!isProposal && !isRejected ? (
+              <Button variant="primary" onClick={() => openCreateDelivery(selectedProject.id)}>
+                + Solicitar entrega
+              </Button>
+            ) : null}
+            {isProposal ? (
+              <>
+                <Button variant="primary" onClick={approveProposal}>
+                  Aprovar proposta
+                </Button>
+                <Button variant="danger" onClick={rejectProposal}>
+                  Recusar proposta
+                </Button>
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -106,7 +154,7 @@ export default function ProjectDetailPage() {
 
       <Card>
         <h3 className="text-xl mb-4">Informações</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Empresa</p>
             <p className="font-bold text-gray-800">{selectedProject.companyName}</p>
@@ -118,6 +166,14 @@ export default function ProjectDetailPage() {
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Status</p>
             <p className="font-bold text-gray-800">{selectedProject.status.replace("_", " ")}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Código</p>
+            <p className="font-bold text-gray-800">{selectedProject.proposalCode || "Não informado"}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Tipo</p>
+            <p className="font-bold text-gray-800">{projectTypeLabel}</p>
           </div>
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Membros</p>
@@ -181,47 +237,59 @@ export default function ProjectDetailPage() {
         ) : null}
       </Card>
 
-      <Card>
-        <h3 className="text-xl mb-4">Entregas do projeto</h3>
-        <div className="space-y-3">
-          {state.deliveries
-            .filter((delivery) => delivery.projectId === selectedProject.id)
-            .map((delivery) => (
-              <div
-                key={delivery.id}
-                onClick={() => {
-                  actions.setSelectedDeliveryId(delivery.id);
-                  setView("DETALHE_ENTREGA");
-                }}
-                className="p-5 border border-gray-100 rounded-2xl hover:bg-gray-50 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4"
-              >
-                <div>
-                  <p className="font-black text-gray-800">{delivery.title}</p>
-                  <p className="text-xs text-gray-500">Prestador: {delivery.provider}</p>
-                  <p className="text-xs text-gray-500">Prazo: {delivery.deadline}</p>
+      {isProposal ? (
+        <Card>
+          <h3 className="text-xl mb-4">Entregas do projeto</h3>
+          <p className="text-sm text-gray-500">A proposta ainda não foi aprovada. As entregas serão liberadas após a aprovação.</p>
+        </Card>
+      ) : isRejected ? (
+        <Card>
+          <h3 className="text-xl mb-4">Entregas do projeto</h3>
+          <p className="text-sm text-gray-500">Proposta recusada. Este projeto está arquivado.</p>
+        </Card>
+      ) : (
+        <Card>
+          <h3 className="text-xl mb-4">Entregas do projeto</h3>
+          <div className="space-y-3">
+            {state.deliveries
+              .filter((delivery) => delivery.projectId === selectedProject.id)
+              .map((delivery) => (
+                <div
+                  key={delivery.id}
+                  onClick={() => {
+                    actions.setSelectedDeliveryId(delivery.id);
+                    setView("DETALHE_ENTREGA");
+                  }}
+                  className="p-5 border border-gray-100 rounded-2xl hover:bg-gray-50 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4"
+                >
+                  <div>
+                    <p className="font-black text-gray-800">{delivery.title}</p>
+                    <p className="text-xs text-gray-500">Prestador: {delivery.provider}</p>
+                    <p className="text-xs text-gray-500">Prazo: {delivery.deadline}</p>
+                  </div>
+                  <div className="flex gap-3 items-center">
+                    <Badge type="priority" value={delivery.priority} />
+                    <Badge type="status" value={delivery.status} />
+                    {role === "ADMIN" ? (
+                      <Button
+                        variant="danger"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          removeDelivery(delivery.id, delivery.title);
+                        }}
+                      >
+                        Excluir
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="flex gap-3 items-center">
-                  <Badge type="priority" value={delivery.priority} />
-                  <Badge type="status" value={delivery.status} />
-                  {role === "ADMIN" ? (
-                    <Button
-                      variant="danger"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        removeDelivery(delivery.id, delivery.title);
-                      }}
-                    >
-                      Excluir
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-          {state.deliveries.filter((delivery) => delivery.projectId === selectedProject.id).length === 0 ? (
-            <div className="py-10 text-center text-gray-300">Nenhuma entrega ainda.</div>
-          ) : null}
-        </div>
-      </Card>
+              ))}
+            {state.deliveries.filter((delivery) => delivery.projectId === selectedProject.id).length === 0 ? (
+              <div className="py-10 text-center text-gray-300">Nenhuma entrega ainda.</div>
+            ) : null}
+          </div>
+        </Card>
+      )}
     </>
   );
 }

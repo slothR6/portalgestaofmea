@@ -9,6 +9,7 @@ import MeetingsPage from "../pages/MeetingsPage";
 import UsersPage from "../pages/Users";
 import ProvidersPage from "../pages/Providers";
 import ProjectsPage from "../pages/Projects";
+import ProposalsPage from "../pages/Proposals";
 import ProjectDetailPage from "../pages/ProjectDetail";
 import DeliveriesPage from "../pages/Deliveries";
 import DeliveryDetailPage from "../pages/DeliveryDetail";
@@ -41,6 +42,7 @@ export function AppRoutes() {
       {view === "USUARIOS" && role === "ADMIN" && <UsersPage />}
       {view === "PRESTADORES" && role === "ADMIN" && <ProvidersPage />}
       {view === "EMPRESAS" && role === "ADMIN" && <CompaniesPage />}
+      {view === "PROPOSTAS" && role === "ADMIN" && <ProposalsPage />}
       {view === "PROJETOS" && <ProjectsPage />}
       {view === "DETALHE_PROJETO" && <ProjectDetailPage />}
       {view === "ENTREGAS" && <DeliveriesPage />}

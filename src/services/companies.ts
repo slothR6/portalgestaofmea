@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, limit, orderBy, query, updateDoc } from "firebase/firestore";
+import { addDoc, collection, doc, getDocs, limit, orderBy, query, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { Company } from "../types";
 import { PAGE_SIZE } from "../constants";
@@ -6,6 +6,17 @@ import { PAGE_SIZE } from "../constants";
 export async function createCompany(payload: Omit<Company, "id">) {
   const docRef = await addDoc(collection(db, "companies"), payload);
   return docRef.id;
+}
+
+export async function getNextCompanyNumber() {
+  const snap = await getDocs(collection(db, "companies"));
+  let maxNumber = 0;
+  snap.docs.forEach((docSnap) => {
+    const data = docSnap.data() as Company;
+    const value = typeof data.companyNumber === "number" ? data.companyNumber : 0;
+    if (value > maxNumber) maxNumber = value;
+  });
+  return maxNumber + 1;
 }
 
 export async function updateCompany(companyId: string, patch: Partial<Company>) {

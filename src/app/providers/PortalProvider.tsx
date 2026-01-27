@@ -21,6 +21,8 @@ interface PortalState {
     name: string;
     description: string;
     memberUids: string[];
+    projectType: "" | "INSPECAO" | "ANALISE_FALHA" | "DESENVOLVIMENTO_ENGENHARIA" | "OUTRO";
+    projectTypeOther: string;
   };
   projectEditForm: {
     id: string;
@@ -90,6 +92,8 @@ const initialState: PortalState = {
     name: "",
     description: "",
     memberUids: [],
+    projectType: "",
+    projectTypeOther: "",
   },
   projectEditForm: {
     id: "",

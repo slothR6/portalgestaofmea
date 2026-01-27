@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Company } from "../types";
-import { createCompany, softDeleteCompany, updateCompany } from "../services/companies";
+import { createCompany, getNextCompanyNumber, softDeleteCompany, updateCompany } from "../services/companies";
 import { usePortalStore } from "../hooks/usePortalStore";
 import { sanitize } from "../utils/sanitize";
 
@@ -34,7 +34,9 @@ export default function CompaniesPage() {
 
   const selectedCompanyProjects = useMemo(() => {
     if (!selectedCompany) return [];
-    return state.projects.filter((p) => p.companyId === selectedCompany.id);
+    return state.projects.filter(
+      (p) => p.companyId === selectedCompany.id && p.status !== "PROPOSTA" && p.status !== "RECUSADA"
+    );
   }, [state.projects, selectedCompany]);
 
   const startCreate = () => {
@@ -76,15 +78,21 @@ export default function CompaniesPage() {
 
     try {
       if (formMode === "create") {
+        const nextCompanyNumber = await getNextCompanyNumber();
         const newId = await createCompany({
           ...payload,
+          companyNumber: nextCompanyNumber,
           createdAt: Date.now(),
           createdByUid: profile?.uid || "",
         });
         setSelectedCompanyId(newId);
         pushToast({ type: "success", title: "Empresa criada" });
       } else if (formMode === "edit" && selectedCompany) {
-        await updateCompany(selectedCompany.id, payload);
+        const nextCompanyNumber = selectedCompany.companyNumber ? null : await getNextCompanyNumber();
+        await updateCompany(selectedCompany.id, {
+          ...payload,
+          ...(nextCompanyNumber ? { companyNumber: nextCompanyNumber } : {}),
+        });
         pushToast({ type: "success", title: "Empresa atualizada" });
       }
       cancelForm();
@@ -162,7 +170,12 @@ export default function CompaniesPage() {
               >
                 <p className="font-black text-slate-800">{company.name}</p>
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mt-2">
-                  {state.projects.filter((p) => p.companyId === company.id).length} projetos
+                  {
+                    state.projects.filter(
+                      (p) => p.companyId === company.id && p.status !== "PROPOSTA" && p.status !== "RECUSADA"
+                    ).length
+                  }{" "}
+                  projetos
                 </p>
               </button>
             ))}
