@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type Dispatch } from "react";
 import { onSnapshot } from "firebase/firestore";
 import { Company, Delivery, Meeting, UserProfile, UserRole } from "../types";
 import {
@@ -18,7 +18,7 @@ interface PortalSubscriptionsArgs {
   profile: UserProfile | null;
   role: UserRole | null;
   pushToast: (payload: { type: "success" | "error" | "info"; title: string; message?: string }) => void;
-  dispatch: React.Dispatch<PortalAction>;
+  dispatch: Dispatch<PortalAction>;
 }
 
 export function usePortalSubscriptions({ user, profile, role, pushToast, dispatch }: PortalSubscriptionsArgs) {
@@ -42,7 +42,7 @@ export function usePortalSubscriptions({ user, profile, role, pushToast, dispatc
         },
         (error) => {
           console.error("Error loading users:", error);
-          pushToast({ type: "error", title: "Erro ao carregar usuários", message: error.message });
+          pushToast({ type: "error", title: "Erro ao carregar usuÃ¡rios", message: error.message });
           dispatch({ type: "setLoading", payload: { users: false } });
         }
       );
@@ -51,18 +51,25 @@ export function usePortalSubscriptions({ user, profile, role, pushToast, dispatc
       dispatch({ type: "setLoading", payload: { users: false } });
     }
 
-    const adminUsersQ = getAdminUsersQuery();
-    const unsubAdmins = onSnapshot(
-      adminUsersQ,
-      (snap) => {
-        const arr = snap.docs.map((d) => d.data() as UserProfile);
-        dispatch({ type: "setAdminUids", payload: arr.map((u) => u.uid) });
-      },
-      (error) => {
-        console.error("Error loading admin users:", error);
-        pushToast({ type: "error", title: "Erro ao carregar administradores", message: error.message });
-      }
-    );
+    let unsubAdmins = () => {};
+    if (role === "ADMIN") {
+      const adminUsersQ = getAdminUsersQuery();
+      unsubAdmins = onSnapshot(
+        adminUsersQ,
+        (snap) => {
+          const arr = snap.docs.map((d) => d.data() as UserProfile);
+          dispatch({ type: "setAdminUids", payload: arr.map((u) => u.uid) });
+        },
+        (error) => {
+          console.error("Error loading admin users:", error);
+          if (error?.code !== "permission-denied") {
+            pushToast({ type: "error", title: "Erro ao carregar administradores", message: error.message });
+          }
+        }
+      );
+    } else {
+      dispatch({ type: "setAdminUids", payload: [] });
+    }
 
     let unsubCompanies = () => {};
     if (role === "ADMIN") {
@@ -98,7 +105,7 @@ export function usePortalSubscriptions({ user, profile, role, pushToast, dispatc
             return {
               ...data,
               id: d.id,
-              companyName: data.companyName || data.client || "Empresa não definida",
+              companyName: data.companyName || data.client || "Empresa nÃ£o definida",
               companyId: data.companyId || "",
             };
           })
@@ -152,7 +159,7 @@ export function usePortalSubscriptions({ user, profile, role, pushToast, dispatc
       },
       (error) => {
         console.error("Error loading meetings:", error);
-        pushToast({ type: "error", title: "Erro ao carregar reuniões", message: error.message });
+        pushToast({ type: "error", title: "Erro ao carregar reuniÃµes", message: error.message });
         dispatch({ type: "setLoading", payload: { meetings: false } });
       }
     );
@@ -166,7 +173,7 @@ export function usePortalSubscriptions({ user, profile, role, pushToast, dispatc
       },
       (error) => {
         console.error("Error loading notifications:", error);
-        pushToast({ type: "error", title: "Erro ao carregar notificações", message: error.message });
+        pushToast({ type: "error", title: "Erro ao carregar notificaÃ§Ãµes", message: error.message });
       }
     );
 
