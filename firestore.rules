@@ -1,0 +1,364 @@
+// Baseline versioned on 2026-03-10 from the production rules snapshot
+// provided in the implementation brief for Fase 1.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userDoc(request.auth.uid).data.role == "ADMIN";
+    }
+
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidUserCreate() {
+      return request.resource.data.uid == request.auth.uid
+        && request.resource.data.role == "PRESTADOR"
+        && request.resource.data.status == "PENDING"
+        && request.resource.data.active == false;
+    }
+
+    function isAllowedSelfUserUpdate() {
+      return request.resource.data.diff(resource.data).changedKeys()
+        .hasOnly(["name", "email", "photoURL", "pixKey"]);
+    }
+
+    function isProviderOwner() {
+      return isSignedIn() && resource.data.providerUid == request.auth.uid;
+    }
+
+    function isProviderOwnerCreate() {
+      return isSignedIn() && request.resource.data.providerUid == request.auth.uid;
+    }
+
+    function isAllowedProviderDeliveryUpdate() {
+      return request.resource.data.diff(resource.data).changedKeys()
+        .hasOnly(["attachments", "updatedAt"]);
+    }
+
+    function isAllowedProviderDeliveryCoreUpdate() {
+      return request.resource.data.diff(resource.data).changedKeys()
+        .hasOnly(["status", "progress", "updatedAt"])
+        && (
+          (request.resource.data.status == resource.data.status
+            && request.resource.data.progress == "FAZENDO"
+            && resource.data.progress == "A_FAZER"
+            && resource.data.status != "APROVADO")
+          || (request.resource.data.status == "REVISAO"
+            && request.resource.data.progress == "REVISAO"
+            && resource.data.status != "APROVADO")
+        );
+    }
+
+    function hasAttachments() {
+      return request.resource.data.attachments is list
+        && request.resource.data.attachments.size() > 0;
+    }
+
+    function isAllowedMeasurementUpdate() {
+      return request.resource.data.diff(resource.data).changedKeys()
+        .hasOnly(["amountCents", "status", "submittedAt", "updatedAt"]);
+    }
+
+    function deliveryDoc(deliveryId) {
+      return get(/databases/$(database)/documents/deliveries/$(deliveryId));
+    }
+
+    function canReadDelivery(deliveryId) {
+      return isSignedIn()
+        && (isAdmin()
+          || deliveryDoc(deliveryId).data.providerUid == request.auth.uid
+          || deliveryDoc(deliveryId).data.managerUid == request.auth.uid
+          || request.auth.uid in deliveryDoc(deliveryId).data.memberUids);
+    }
+
+    function isDeliveryProvider(deliveryId) {
+      return isSignedIn() && deliveryDoc(deliveryId).data.providerUid == request.auth.uid;
+    }
+
+    function isValidDeliveryCommentCreate() {
+      return request.resource.data.authorUid == request.auth.uid;
+    }
+
+    function isValidDeliveryLinkCreate() {
+      return request.resource.data.createdByUid == request.auth.uid;
+    }
+
+    function isValidDeadlineRequestCreate(deliveryId) {
+      return isDeliveryProvider(deliveryId)
+        && request.resource.data.requestedByUid == request.auth.uid
+        && request.resource.data.status == "PENDING"
+        && request.resource.data.decidedAt == null
+        && request.resource.data.decidedByUid == null;
+    }
+
+    function isValidDeadlineRequestHistoryBackfill(deliveryId) {
+      return isDeliveryProvider(deliveryId)
+        && request.resource.data.requestedByUid == request.auth.uid
+        && request.resource.data.status != "PENDING"
+        && request.resource.data.decidedAt != null
+        && request.resource.data.decidedByUid != null;
+    }
+
+    function isValidDeadlineRequestDecision() {
+      return resource.data.status == "PENDING"
+        && request.resource.data.requestedDeadline == resource.data.requestedDeadline
+        && request.resource.data.reason == resource.data.reason
+        && request.resource.data.requestedAt == resource.data.requestedAt
+        && request.resource.data.requestedByUid == resource.data.requestedByUid
+        && request.resource.data.status != "PENDING"
+        && request.resource.data.decidedByUid == request.auth.uid;
+    }
+
+    function hasConsistentProjectOrigin() {
+      return (
+        (request.resource.data.sourceProposalId == null
+          && request.resource.data.sourceOpportunityId == null)
+        || (request.resource.data.sourceProposalId != null
+          && request.resource.data.sourceOpportunityId != null)
+      );
+    }
+
+    function projectOriginFieldsUnchanged() {
+      return request.resource.data.sourceProposalId == resource.data.sourceProposalId
+        && request.resource.data.sourceOpportunityId == resource.data.sourceOpportunityId;
+    }
+
+    function isValidProposalCreate() {
+      return request.resource.data.projectId == null
+        && request.resource.data.sourceProjectId == null
+        && request.resource.data.approvedAt == null
+        && request.resource.data.approvedByUid == null
+        && request.resource.data.approvedByName == null;
+    }
+
+    function proposalApprovalFieldsStable() {
+      return (resource.data.projectId == null
+          || request.resource.data.projectId == resource.data.projectId)
+        && (resource.data.sourceProjectId == null
+          || request.resource.data.sourceProjectId == resource.data.sourceProjectId)
+        && (resource.data.approvedAt == null
+          || request.resource.data.approvedAt == resource.data.approvedAt)
+        && (resource.data.approvedByUid == null
+          || request.resource.data.approvedByUid == resource.data.approvedByUid)
+        && (resource.data.approvedByName == null
+          || request.resource.data.approvedByName == resource.data.approvedByName);
+    }
+
+    function approvedProposalLocked() {
+      return resource.data.status != "APROVADA"
+        || request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(["updatedAt"]);
+    }
+
+    function isNonEmptyString(value) {
+      return value is string && value.size() > 0;
+    }
+
+    function approvedProposalHasProjectAfter(proposalId) {
+      return request.resource.data.projectId is string
+        && request.resource.data.sourceProjectId is string
+        && request.resource.data.projectId == request.resource.data.sourceProjectId
+        && existsAfter(/databases/$(database)/documents/projects/$(request.resource.data.projectId))
+        && getAfter(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.sourceProposalId == proposalId
+        && getAfter(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.sourceOpportunityId == request.resource.data.opportunityId
+        && getAfter(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.companyId == request.resource.data.companyId
+        && getAfter(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.companyName == request.resource.data.companySnapshot.name;
+    }
+
+    function isValidProposalApprovalTransition(proposalId) {
+      return request.resource.data.status != "APROVADA"
+        || resource.data.status == "APROVADA"
+        || (
+          resource.data.status != "RECUSADA"
+          && isNonEmptyString(request.resource.data.title)
+          && isNonEmptyString(request.resource.data.scopeSummary)
+          && request.resource.data.value is number
+          && request.resource.data.value > 0
+          && isNonEmptyString(request.resource.data.companyId)
+          && isNonEmptyString(request.resource.data.opportunityId)
+          && isNonEmptyString(request.resource.data.ownerUid)
+          && request.resource.data.companySnapshot.id == request.resource.data.companyId
+          && isNonEmptyString(request.resource.data.companySnapshot.name)
+          && request.resource.data.opportunitySnapshot.id == request.resource.data.opportunityId
+          && isNonEmptyString(request.resource.data.opportunitySnapshot.title)
+          && request.resource.data.approvedAt != null
+          && request.resource.data.approvedByUid == request.auth.uid
+          && isNonEmptyString(request.resource.data.approvedByName)
+          && approvedProposalHasProjectAfter(proposalId)
+        );
+    }
+
+    match /users/{userId} {
+      allow read: if isAdmin() || isSelf(userId);
+      allow create: if isSelf(userId) && isValidUserCreate();
+      allow update: if isAdmin() || (isSelf(userId) && isAllowedSelfUserUpdate());
+      allow delete: if false;
+    }
+
+    match /users/{userId}/notifications/{notificationId} {
+      allow read: if isSelf(userId);
+      allow create: if isSignedIn()
+        && request.resource.data.toUid == userId
+        && (isAdmin()
+          || (request.resource.data.toUid != request.auth.uid
+            && userDoc(userId).data.role == "ADMIN"));
+      allow update, delete: if isSelf(userId);
+    }
+
+    match /users/{userId}/safetyDocs/{docId} {
+      allow read: if isAdmin() || isSelf(userId);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /providers/{providerUid} {
+      allow read: if isAdmin() || isSelf(providerUid);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /projects/{projectId} {
+      allow read: if isSignedIn()
+        && (isAdmin()
+          || request.auth.uid == resource.data.managerUid
+          || request.auth.uid in resource.data.memberUids);
+      allow create: if isAdmin() && hasConsistentProjectOrigin();
+      allow update: if (isAdmin() || request.auth.uid == resource.data.managerUid)
+        && projectOriginFieldsUnchanged();
+      allow delete: if isAdmin();
+    }
+
+    match /projects/{projectId}/attachments/{attachmentId} {
+      allow read: if isSignedIn()
+        && (isAdmin()
+          || request.auth.uid == get(/databases/$(database)/documents/projects/$(projectId)).data.managerUid
+          || request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.memberUids);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /companies/{companyId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /companies/{companyId}/contacts/{contactId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    match /opportunities/{opportunityId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    match /proposals/{proposalId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && isValidProposalCreate();
+      allow update: if isAdmin()
+        && proposalApprovalFieldsStable()
+        && isValidProposalApprovalTransition(proposalId)
+        && approvedProposalLocked();
+      allow delete: if isAdmin();
+    }
+
+    match /deliveries/{deliveryId} {
+      allow read: if isSignedIn()
+        && (isAdmin()
+          || resource.data.providerUid == request.auth.uid
+          || resource.data.managerUid == request.auth.uid
+          || request.auth.uid in resource.data.memberUids);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (isSignedIn()
+          && resource.data.providerUid == request.auth.uid
+          && isAllowedProviderDeliveryCoreUpdate());
+    }
+
+    match /deliveries/{deliveryId}/comments/{commentId} {
+      allow read: if canReadDelivery(deliveryId);
+      allow create: if canReadDelivery(deliveryId) && isValidDeliveryCommentCreate();
+      allow update, delete: if isAdmin();
+    }
+
+    match /deliveries/{deliveryId}/links/{linkId} {
+      allow read: if canReadDelivery(deliveryId);
+      allow create: if canReadDelivery(deliveryId) && isValidDeliveryLinkCreate();
+      allow update, delete: if isAdmin();
+    }
+
+    match /deliveries/{deliveryId}/deadlineRequests/{requestId} {
+      allow read: if canReadDelivery(deliveryId);
+      allow create: if isValidDeadlineRequestCreate(deliveryId)
+        || isValidDeadlineRequestHistoryBackfill(deliveryId)
+        || (isAdmin()
+          && request.resource.data.status != "PENDING"
+          && request.resource.data.decidedAt != null
+          && request.resource.data.decidedByUid == request.auth.uid);
+      allow update: if isAdmin() && isValidDeadlineRequestDecision();
+      allow delete: if false;
+    }
+
+    match /providerDeliveries/{deliveryId} {
+      allow read: if isAdmin() || isProviderOwner();
+      allow create: if isAdmin()
+        || (isProviderOwnerCreate()
+          && request.resource.data.status == "ENVIADA"
+          && hasAttachments());
+      allow update: if isAdmin()
+        || (isProviderOwner() && isAllowedProviderDeliveryUpdate());
+      allow delete: if isAdmin();
+    }
+
+    match /paymentMilestones/{milestoneId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.providerUid == request.auth.uid);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /measurementReports/{reportId} {
+      allow read: if isAdmin() || isProviderOwner();
+      allow create: if isAdmin()
+        || (isProviderOwnerCreate() && request.resource.data.status == "ENVIADO");
+      allow update: if isAdmin()
+        || (isProviderOwner() && isAllowedMeasurementUpdate());
+      allow delete: if isAdmin();
+    }
+
+    match /meetings/{meetingId} {
+      allow read: if isSignedIn()
+        && (isAdmin() || request.auth.uid in resource.data.participantUids);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /providers/{providerUid}/safetyDocs/{docId} {
+      allow read: if isAdmin() || isSelf(providerUid);
+      allow write: if isAdmin();
+    }
+
+    match /providers/{providerUid}/attachments/{attachmentId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && resource.data.toUid == request.auth.uid;
+      allow create: if isSignedIn()
+        && (isAdmin()
+          || (request.resource.data.toUid != request.auth.uid
+            && userDoc(request.resource.data.toUid).data.role == "ADMIN"));
+      allow update, delete: if isSignedIn() && resource.data.toUid == request.auth.uid;
+    }
+
+    // Development branch guardrail:
+    // ADMIN keeps unrestricted access across any new collection or subcollection
+    // introduced during the migration, while providers/users still rely on
+    // explicit scoped rules above.
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

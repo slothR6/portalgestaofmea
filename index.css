@@ -1,0 +1,99 @@
+:root {
+  --portal-green: #013d23;
+  --portal-green-soft: #d5d88e;
+  --portal-gray: #e5e7ea;
+  --portal-text: #0f172a;
+  --portal-muted: #64748b;
+  --portal-surface: rgba(255, 255, 255, 0.94);
+  --portal-line: rgba(148, 163, 184, 0.24);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  color: var(--portal-text);
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(213, 216, 142, 0.28), transparent 20%),
+    linear-gradient(180deg, #f7f8f6 0%, #f3f5f6 100%);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  color: var(--portal-text);
+  font-family: "Manrope", "IBM Plex Sans", sans-serif;
+  letter-spacing: -0.02em;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  border: 1px solid var(--portal-line);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--portal-text);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: rgba(1, 61, 35, 0.35);
+  box-shadow: 0 0 0 4px rgba(1, 61, 35, 0.08);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #94a3b8;
+}
+
+::selection {
+  background: rgba(213, 216, 142, 0.65);
+  color: var(--portal-green);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(1, 61, 35, 0.24);
+  background-clip: padding-box;
+}
